@@ -9,8 +9,8 @@ node {
 
     sh "docker build --rm -t ${dockerRepo} ."
 
-    //stage "Test"
-    //	sh "docker run --rm ${dockerRepo}"
+    stage "Test"
+    sh "docker run --rm ${dockerRepo}"
 
     stage "Deploy"
     withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'jenkins-clojars-credentials', usernameVariable: 'LEIN_USERNAME', passwordVariable: 'LEIN_PASSWORD']]) {
