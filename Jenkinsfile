@@ -1,3 +1,4 @@
+#!groovy
 def repo = "clj-jargon"
 def dockerUser = "discoenv"
 
