@@ -15,3 +15,5 @@ bin
 *.eld
 .idea
 *.iml
+build.xml
+test2junit
