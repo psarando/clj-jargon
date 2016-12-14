@@ -20,7 +20,7 @@
                   :exclusions [[org.slf4j/slf4j-api]
                                [org.slf4j/slf4j-log4j12]]]
                  [slingshot "0.12.2"]
-                 [org.cyverse/clojure-commons "2.8.0"]]
+                 [org.cyverse/clojure-commons "2.8.1"]]
   :repositories [["dice.repository"
                   {:url "https://raw.github.com/DICE-UNC/DICE-Maven/master/releases"}]
                  ["renci-snapshot.repository"
