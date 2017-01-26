@@ -17,8 +17,8 @@
 
 (defn- escape-gen-query-char
   [c]
-  (cond (= c "\\") "\\\\\\\\"
-        :else      (str "\\\\" c)))
+  (cond (= c "\\") "\\\\"
+        :else      (str "\\" c)))
 
 (defmulti column-xformer type)
 (defmethod column-xformer RodsGenQueryEnum
