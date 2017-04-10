@@ -151,7 +151,7 @@
      :type          :file
      :file-size     (.getDataSize data-obj)
      :md5           (.getChecksum data-obj)
-     :date-created  (long (.. data-obj getUpdatedAt getTime))
+     :date-created  (long (.. data-obj getCreatedAt getTime))
      :date-modified (long (.. data-obj getUpdatedAt getTime))}))
 
 (defn stat
