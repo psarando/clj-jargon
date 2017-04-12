@@ -68,8 +68,8 @@
      ERR_NOT_A_USER                                  - If the client-user isn't a known iRODS user"
   [{^IRODSFileSystem cm-proxy :proxy :as cfg} client-user]
   (try+
-    (let [acnt (account cfg client-user)
-          aof  (.getIRODSAccessObjectFactory cm-proxy)]
+    (let [aof  (.getIRODSAccessObjectFactory cm-proxy)
+          acnt (.getAuthenticatedIRODSAccount (.authenticateIRODSAccount aof (account cfg client-user)))]
       (assoc cfg
         :irodsAccount        acnt
         :accessObjectFactory aof
