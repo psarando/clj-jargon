@@ -114,21 +114,15 @@
 
 (defn lastmod-date
   "Returns the date that the file/directory was last modified."
-  [cm ^String path]
+  [{^IRODSFileSystemAO cm-ao :fileSystemAO} ^String path]
   (validate-path-lengths path)
-  (cond
-    (is-dir? cm path)  (str (long (.getTime (.getModifiedAt (collection cm path)))))
-    (is-file? cm path) (str (long (.getTime (.getUpdatedAt (data-object cm path)))))
-    :else              nil))
+  (str (long (.getTime (.getModifiedAt (.getObjStat cm-ao path))))))
 
 (defn created-date
   "Returns the date that the file/directory was created."
-  [cm ^String path]
+  [{^IRODSFileSystemAO cm-ao :fileSystemAO} ^String path]
   (validate-path-lengths path)
-  (cond
-    (is-dir? cm path)  (str (long (.. (collection cm path) getCreatedAt getTime)))
-    (is-file? cm path) (str (long (.. (data-object cm path) getCreatedAt getTime)))
-    :else              nil))
+  (str (long (.getTime (.getCreatedAt (.getObjStat cm-ao path))))))
 
 (defn- dir-stat
   "Returns status information for a directory."
@@ -165,9 +159,9 @@
 
 (defn file-size
   "Returns the size of the file in bytes."
-  [cm ^String path]
+  [{^IRODSFileSystemAO cm-ao :fileSystemAO} ^String path]
   (validate-path-lengths path)
-  (.getDataSize (data-object cm path)))
+  (.getObjSize (.getObjStat cm-ao path)))
 
 (defn quota-map
   [^Quota quota-entry]
