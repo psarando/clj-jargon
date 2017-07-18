@@ -98,7 +98,7 @@
      :write (contains? #{write-perm own-perm} perms)
      :own   (contains? #{own-perm} perms)}))
 
-(defn user-collection-perms
+(defn- user-collection-perms
   [cm user coll-path]
   (validate-path-lengths coll-path)
   (->> (conj (set (user-groups cm user)) user)
@@ -108,7 +108,7 @@
        (map #(FilePermissionEnum/valueOf (Integer/parseInt (first %))))
        (set)))
 
-(defn user-dataobject-perms
+(defn- user-dataobject-perms
   [cm user data-path]
   (validate-path-lengths data-path)
   (->> (conj (set (user-group-ids cm user)) (username->id cm user))
