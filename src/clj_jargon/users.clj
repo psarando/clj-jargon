@@ -25,6 +25,12 @@
   (for [^UserGroup ug (.findUserGroupsForUser ug-ao user)]
     (.getUserGroupName ug)))
 
+(defn user-group-ids
+  "Returns a list of group IDs that the user is in."
+  [{^UserGroupAO ug-ao :userGroupAO} user]
+  (for [^UserGroup ug (.findUserGroupsForUser ug-ao user)]
+    (.getUserGroupId ug)))
+
 (defn user-exists?
   "Returns true if 'user' exists in iRODS."
   [{^UserAO user-ao :userAO} user]

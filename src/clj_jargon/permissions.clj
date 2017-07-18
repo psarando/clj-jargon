@@ -111,8 +111,7 @@
 (defn user-dataobject-perms
   [cm user data-path]
   (validate-path-lengths data-path)
-  (->> (conj (set (user-groups cm user)) user)
-       (map (partial username->id cm))
+  (->> (conj (set (user-group-ids cm user)) (username->id cm user))
        (map #(dataobject-perms-rs cm % data-path))
        (apply concat)
        (map (fn [^IRODSQueryResultRow rs] (.getColumnsAsList rs)))
