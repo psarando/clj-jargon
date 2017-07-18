@@ -152,65 +152,93 @@
      :write write
      :own   own}))
 
-(defn dataobject-perm?
+(defn- user-id-dataobject-perm?
+  "Utility function which checks if a given user-id has a given permission on
+  data-path"
+  [cm user-id data-path perm]
+  (let [results (dataobject-perms-rs cm user-id data-path)]
+    (some #(get (perm-map-for (first (.getColumnsAsList %))) perm) results)))
+
+(defn- loop-user-id-dataobject-perms
+  "Iterates through user IDs, checking if that user has the specified
+  permission or better on data-path, short-circuiting when true"
+  [cm user-ids data-path perm]
+  (when (seq user-ids)
+    (or (user-id-dataobject-perm? cm (first user-ids) data-path perm)
+        (recur cm (rest user-ids) data-path perm))))
+
+(defn- dataobject-perm?
   "Utility function that checks to see of the user has the specified
-   permission for data-path."
+   permission or better for data-path."
   [cm username data-path checked-perm]
   (validate-path-lengths data-path)
-  (let [perms (user-dataobject-perms cm username data-path)]
-    (or (contains? perms checked-perm) (contains? perms own-perm))))
+  (or (user-id-dataobject-perm? cm (username->id cm username) data-path checked-perm)
+      (loop-user-id-dataobject-perms cm (user-group-ids cm username) data-path checked-perm)))
 
-(defn dataobject-readable?
+(defn- dataobject-readable?
   "Checks to see if the user has read permissions on data-path. Only
    works for dataobjects."
   [cm user data-path]
   (validate-path-lengths data-path)
-  (or (dataobject-perm? cm user data-path read-perm)
-      (dataobject-perm? cm user data-path write-perm)))
+  (dataobject-perm? cm user data-path :read))
 
-(defn dataobject-writeable?
+(defn- dataobject-writeable?
   "Checks to see if the user has write permissions on data-path. Only
    works for dataobjects."
   [cm user data-path]
   (validate-path-lengths data-path)
-  (dataobject-perm? cm user data-path write-perm))
+  (dataobject-perm? cm user data-path :write))
 
-(defn owns-dataobject?
+(defn- owns-dataobject?
   "Checks to see if the user has ownership permissions on data-path. Only
    works for dataobjects."
   [cm user data-path]
   (validate-path-lengths data-path)
-  (dataobject-perm? cm user data-path own-perm))
+  (dataobject-perm? cm user data-path :own))
 
-(defn collection-perm?
+(defn- user-coll-perm?
+  "Utility function which checks if a given user has a given permission on
+  coll-path"
+  [cm user coll-path perm]
+  (let [results (collection-perms-rs cm user coll-path)]
+    (some #(get (perm-map-for (first (.getColumnsAsList %))) perm) results)))
+
+(defn- loop-user-coll-perms
+  "Iterates through usernames, checking if that user has the specified
+  permission or better on coll-path, short-circuiting when true"
+  [cm users coll-path perm]
+  (when (seq users)
+    (or (user-coll-perm? cm (first users) coll-path perm)
+        (recur cm (rest users) coll-path perm))))
+
+(defn- collection-perm?
   "Utility function that checks to see if the user has the specified
-   permission for the collection path."
+   permission or better for the collection path."
   [cm username coll-path checked-perm]
   (validate-path-lengths coll-path)
-  (let [perms (user-collection-perms cm username coll-path)]
-    (or (contains? perms checked-perm) (contains? perms own-perm))))
+  (or (user-coll-perm? cm username coll-path checked-perm)
+      (loop-user-coll-perms cm (user-groups cm username) coll-path checked-perm)))
 
-(defn collection-readable?
+(defn- collection-readable?
   "Checks to see if the user has read permissions on coll-path. Only
    works for collection paths."
   [cm user coll-path]
   (validate-path-lengths coll-path)
-  (or (collection-perm? cm user coll-path read-perm)
-      (collection-perm? cm user coll-path write-perm)))
+  (collection-perm? cm user coll-path :read))
 
-(defn collection-writeable?
+(defn- collection-writeable?
   "Checks to see if the suer has write permissions on coll-path. Only
    works for collection paths."
   [cm user coll-path]
   (validate-path-lengths coll-path)
-  (collection-perm? cm user coll-path write-perm))
+  (collection-perm? cm user coll-path :write))
 
-(defn owns-collection?
+(defn- owns-collection?
   "Checks to see if the user has ownership permissions on coll-path. Only
    works for collection paths."
   [cm user coll-path]
   (validate-path-lengths coll-path)
-  (collection-perm? cm user coll-path own-perm))
+  (collection-perm? cm user coll-path :own))
 
 (defn perm-map
   [[perm-id username]]
