@@ -257,17 +257,17 @@
   [cm abs-path]
   (let [path' (ft/rm-last-slash abs-path)]
     (validate-path-lengths path')
-    (if (item/is-file? cm path')
-      (mapv perm-map (ll/user-dataobject-perms cm path'))
-      (mapv perm-map (ll/user-collection-perms cm path')))))
+    (case (item/object-type cm path')
+      :file (mapv perm-map (ll/user-dataobject-perms cm path'))
+      :dir  (mapv perm-map (ll/user-collection-perms cm path')))))
 
 (defn list-user-perm
   [cm abs-path]
   (let [path' (ft/rm-last-slash abs-path)]
     (validate-path-lengths path')
-    (if (item/is-file? cm path')
-      (mapv perm-user->map (ll/user-dataobject-perms cm path'))
-      (mapv perm-user->map (ll/user-collection-perms cm path')))))
+    (case (item/object-type cm path')
+      :file (mapv perm-user->map (ll/user-dataobject-perms cm path'))
+      :dir  (mapv perm-user->map (ll/user-collection-perms cm path')))))
 
 (defn set-dataobj-perms
   [{^DataObjectAO dataobj :dataObjectAO zone :zone} user fpath read? write? own?]
@@ -294,12 +294,9 @@
      (set-permissions cm user fpath read? write? own? false))
   ([cm user fpath read? write? own? recursive?]
      (validate-path-lengths fpath)
-     (cond
-      (item/is-file? cm fpath)
-      (set-dataobj-perms cm user fpath read? write? own?)
-
-      (item/is-dir? cm fpath)
-      (set-coll-perms cm user fpath read? write? own? recursive?))))
+     (case (item/object-type cm fpath)
+      :file (set-dataobj-perms cm user fpath read? write? own?)
+      :dir  (set-coll-perms cm user fpath read? write? own? recursive?))))
 
 (defn set-permission
   ([cm user fpath permission]
@@ -329,12 +326,10 @@
     zone :zone
     :as cm} path owner]
   (validate-path-lengths path)
-  (cond
-   (item/is-file? cm path)
-   (.setAccessPermissionOwn data-ao zone path owner)
+  (case (item/object-type cm path)
+   :file (.setAccessPermissionOwn data-ao zone path owner)
 
-   (item/is-dir? cm path)
-   (.setAccessPermissionOwn collection-ao zone path owner true)))
+   :dir  (.setAccessPermissionOwn collection-ao zone path owner true)))
 
 (defn set-inherits
   "Sets the inheritance attribute of a collection to true (recursively).
@@ -378,18 +373,12 @@
       path - String containing an absolute path for something in iRODS."
   [cm user path]
   (validate-path-lengths path)
-  (cond
-   (not (user-exists? cm user))
-   false
-
-   (item/is-dir? cm path)
-   (collection-writeable? cm user (ft/rm-last-slash path))
-
-   (item/is-file? cm path)
-   (dataobject-writeable? cm user (ft/rm-last-slash path))
-
-   :else
-   false))
+  (if-not (user-exists? cm user)
+    false
+    (case (item/object-type cm path)
+      :dir  (collection-writeable? cm user (ft/rm-last-slash path))
+      :file (dataobject-writeable? cm user (ft/rm-last-slash path))
+      false)))
 
 (defn ^Boolean is-readable?
   "Returns true if 'user' can read 'path'.
@@ -400,18 +389,12 @@
       path - String containing an path for something in iRODS."
   [cm user path]
   (validate-path-lengths path)
-  (cond
-   (not (user-exists? cm user))
-   false
-
-   (item/is-dir? cm path)
-   (collection-readable? cm user (ft/rm-last-slash path))
-
-   (item/is-file? cm path)
-   (dataobject-readable? cm user (ft/rm-last-slash path))
-
-   :else
-   false))
+  (if-not (user-exists? cm user)
+    false
+    (case (item/object-type cm path)
+      :dir  (collection-readable? cm user (ft/rm-last-slash path))
+      :file (dataobject-readable? cm user (ft/rm-last-slash path))
+      false)))
 
 (defn ^Boolean paths-writeable?
   "Returns true if all of the paths in 'paths' are writeable by 'user'.
@@ -561,14 +544,9 @@
 (defn permissions
   [cm user fpath]
   (validate-path-lengths fpath)
-  (cond
-    (item/is-dir? cm fpath)
-    (collection-perm-map cm user fpath)
-
-    (item/is-file? cm fpath)
-    (dataobject-perm-map cm user fpath)
-
-    :else
+  (case (item/object-type cm fpath)
+    :dir  (collection-perm-map cm user fpath)
+    :file (dataobject-perm-map cm user fpath)
     {:read false
      :write false
      :own false}))
@@ -584,9 +562,9 @@
    Returns:
      It returns the aggregated permission."
   [cm user fpath]
-  (-> (cond
-        (item/is-dir? cm fpath)       (user-collection-perms cm user fpath)
-        (item/is-file? cm fpath) (user-dataobject-perms cm user fpath))
+  (-> (case (item/object-type cm fpath)
+        :dir  (user-collection-perms cm user fpath)
+        :file (user-dataobject-perms cm user fpath))
     max-perm
     fmt-perm))
 
@@ -596,16 +574,16 @@
     zone :zone
     :as cm} user fpath]
   (validate-path-lengths fpath)
-  (cond
-   (item/is-file? cm fpath)
-   (.removeAccessPermissionsForUserInAdminMode
+  (case (item/object-type cm fpath)
+   :file
+    (.removeAccessPermissionsForUserInAdminMode
      data-ao
      zone
      fpath
      user)
 
-   (item/is-dir? cm fpath)
-   (.removeAccessPermissionForUserAsAdmin
+   :dir 
+    (.removeAccessPermissionForUserAsAdmin
      collection-ao
      zone
      fpath
@@ -615,14 +593,9 @@
 (defn owns?
   [cm user fpath]
   (validate-path-lengths fpath)
-  (cond
-    (item/is-file? cm fpath)
-    (owns-dataobject? cm user fpath)
-
-    (item/is-dir? cm fpath)
-    (owns-collection? cm user fpath)
-
-    :else
+  (case (item/object-type cm fpath)
+    :file (owns-dataobject? cm user fpath)
+    :dir  (owns-collection? cm user fpath)
     false))
 
 (defn remove-access-permissions
@@ -631,16 +604,16 @@
     zone :zone
     :as cm} user abs-path]
   (validate-path-lengths abs-path)
-  (cond
-   (item/is-file? cm abs-path)
-   (.removeAccessPermissionsForUserInAdminMode
+  (case (item/object-type cm abs-path)
+   :file
+    (.removeAccessPermissionsForUserInAdminMode
      data-ao
      zone
      abs-path
      user)
 
-   (item/is-dir? cm abs-path)
-   (.removeAccessPermissionForUserAsAdmin
+   :dir
+    (.removeAccessPermissionForUserAsAdmin
      collection-ao
      zone
      abs-path

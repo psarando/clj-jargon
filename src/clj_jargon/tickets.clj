@@ -2,7 +2,7 @@
   (:use [clj-jargon.validations]
         [clj-jargon.init :only [override-user-account proxy-input-stream]]
         [clj-jargon.cart :only [temp-password]]
-        [clj-jargon.item-info :only [file is-dir?]]
+        [clj-jargon.item-info :only [file object-type]]
         [clj-jargon.item-ops :only [input-stream]])
   (:require [clojure-commons.file-utils :as ft]
             [clojure.tools.logging :as log])
@@ -109,9 +109,9 @@
 (defn ticket-ids-for-path
   [cm user path]
   (let [tas (ticket-admin-service cm user)]
-    (if (is-dir? cm path)
-      (mapv ticket-obj->map (.listAllTicketsForGivenCollection tas path 0))
-      (mapv ticket-obj->map (.listAllTicketsForGivenDataObject tas path 0)))))
+    (case (object-type cm path)
+      :dir  (mapv ticket-obj->map (.listAllTicketsForGivenCollection tas path 0))
+      :file (mapv ticket-obj->map (.listAllTicketsForGivenDataObject tas path 0)))))
 
 (defn ticket-expired?
   [^Ticket ticket-obj]

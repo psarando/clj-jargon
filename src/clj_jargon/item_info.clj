@@ -64,21 +64,28 @@
   (doseq [p paths] (validate-path-lengths p))
   (zero? (count (filter #(not (exists? cm %)) paths))))
 
-(defn ^Boolean jargon-type-check
-  [{^IRODSFileSystemAO cm-ao :fileSystemAO} check-type ^String path]
-  (= check-type (.getObjectType (.getObjStat cm-ao path))))
+(defn object-type
+  [{^IRODSFileSystemAO cm-ao :fileSystemAO} ^String path]
+  (condp = (.getObjectType (.getObjStat cm-ao path))
+    collection-type :dir
+    dataobject-type :file
+    :none))
+
+(defn- ^Boolean jargon-type-check
+  [cm check-type ^String path]
+  (= check-type (object-type cm path)))
 
 (defn ^Boolean is-file?
   "Returns true if the path is a file in iRODS, false otherwise."
   [cm ^String path]
   (validate-path-lengths path)
-  (jargon-type-check cm dataobject-type path))
+  (jargon-type-check cm :file path))
 
 (defn ^Boolean is-dir?
   "Returns true if the path is a directory in iRODS, false otherwise."
   [cm ^String path]
   (validate-path-lengths path)
-  (jargon-type-check cm collection-type path))
+  (jargon-type-check cm :dir path))
 
 (defn ^Boolean is-linked-dir?
   "Indicates whether or not a directory (collection) is actually a link to a
@@ -152,10 +159,10 @@
   "Returns status information for a path."
   [cm ^String path]
   (validate-path-lengths path)
-  (cond
-   (is-dir? cm path)  (dir-stat cm path)
-   (is-file? cm path) (file-stat cm path)
-   :else              nil))
+  (case (object-type cm path)
+   :dir  (dir-stat cm path)
+   :file (file-stat cm path)
+   nil))
 
 (defn file-size
   "Returns the size of the file in bytes."
