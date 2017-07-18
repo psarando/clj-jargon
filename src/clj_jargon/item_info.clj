@@ -131,44 +131,33 @@
   (validate-path-lengths path)
   (str (long (.getTime (.getCreatedAt (.getObjStat cm-ao path))))))
 
-(defn- dir-stat
-  "Returns status information for a directory."
-  [cm ^String path]
-  (validate-path-lengths path)
-  (let [coll (collection cm path)]
-    {:id            path
-     :path          path
-     :type          :dir
-     :date-created  (long (.. coll getCreatedAt getTime))
-     :date-modified (long (.. coll getModifiedAt getTime))}))
-
-(defn- file-stat
-  "Returns status information for a file."
-  [cm ^String path]
-  (validate-path-lengths path)
-  (let [data-obj (data-object cm path)]
-    {:id            path
-     :path          path
-     :type          :file
-     :file-size     (.getDataSize data-obj)
-     :md5           (.getChecksum data-obj)
-     :date-created  (long (.. data-obj getCreatedAt getTime))
-     :date-modified (long (.. data-obj getUpdatedAt getTime))}))
-
-(defn stat
-  "Returns status information for a path."
-  [cm ^String path]
-  (validate-path-lengths path)
-  (case (object-type cm path)
-   :dir  (dir-stat cm path)
-   :file (file-stat cm path)
-   nil))
-
 (defn file-size
   "Returns the size of the file in bytes."
   [{^IRODSFileSystemAO cm-ao :fileSystemAO} ^String path]
   (validate-path-lengths path)
   (.getObjSize (.getObjStat cm-ao path)))
+
+(defn stat
+  "Returns status information for a path."
+  [{^IRODSFileSystemAO cm-ao :fileSystemAO} ^String path]
+  (validate-path-lengths path)
+  (let [objstat (.getObjStat cm-ao path)]
+    (condp = (.getObjectType objstat)
+      collection-type
+      {:id            path
+       :path          path
+       :type          :dir
+       :date-created  (long (.getTime (.getCreatedAt objstat)))
+       :date-modified (long (.getTime (.getModifiedAt objstat)))}
+      dataobject-type
+      {:id            path
+       :path          path
+       :type          :file
+       :file-size     (.getObjSize objstat)
+       :md5           (.getChecksum objstat)
+       :date-created  (long (.getTime (.getCreatedAt objstat)))
+       :date-modified (long (.getTime (.getModifiedAt objstat)))
+       })))
 
 (defn quota-map
   [^Quota quota-entry]
