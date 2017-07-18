@@ -107,7 +107,7 @@
        getSpecColType)))
 
 (defn ^DataObject data-object
-  "Returns an instance of DataObject represeting 'path'."
+  "Returns an instance of DataObject representing 'path'."
   [{^DataObjectAO data-ao :dataObjectAO} ^String path]
   (validate-path-lengths path)
   (.findByAbsolutePath data-ao path))
