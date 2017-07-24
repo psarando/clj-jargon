@@ -159,21 +159,13 @@
   (let [results (dataobject-perms-rs cm user-id data-path)]
     (some #(get (perm-map-for (first (.getColumnsAsList %))) perm) results)))
 
-(defn- loop-user-id-dataobject-perms
-  "Iterates through user IDs, checking if that user has the specified
-  permission or better on data-path, short-circuiting when true"
-  [cm user-ids data-path perm]
-  (when (seq user-ids)
-    (or (user-id-dataobject-perm? cm (first user-ids) data-path perm)
-        (recur cm (rest user-ids) data-path perm))))
-
 (defn- dataobject-perm?
   "Utility function that checks to see of the user has the specified
    permission or better for data-path."
   [cm username data-path checked-perm]
   (validate-path-lengths data-path)
   (or (user-id-dataobject-perm? cm (username->id cm username) data-path checked-perm)
-      (loop-user-id-dataobject-perms cm (user-group-ids cm username) data-path checked-perm)))
+      (some #(user-id-dataobject-perm? cm % data-path checked-perm) (user-group-ids cm username))))
 
 (defn- dataobject-readable?
   "Checks to see if the user has read permissions on data-path. Only
@@ -203,21 +195,13 @@
   (let [results (collection-perms-rs cm user coll-path)]
     (some #(get (perm-map-for (first (.getColumnsAsList %))) perm) results)))
 
-(defn- loop-user-coll-perms
-  "Iterates through usernames, checking if that user has the specified
-  permission or better on coll-path, short-circuiting when true"
-  [cm users coll-path perm]
-  (when (seq users)
-    (or (user-coll-perm? cm (first users) coll-path perm)
-        (recur cm (rest users) coll-path perm))))
-
 (defn- collection-perm?
   "Utility function that checks to see if the user has the specified
    permission or better for the collection path."
   [cm username coll-path checked-perm]
   (validate-path-lengths coll-path)
   (or (user-coll-perm? cm username coll-path checked-perm)
-      (loop-user-coll-perms cm (user-groups cm username) coll-path checked-perm)))
+      (some #(user-coll-perm? cm % coll-path checked-perm) (user-groups cm username))))
 
 (defn- collection-readable?
   "Checks to see if the user has read permissions on coll-path. Only
