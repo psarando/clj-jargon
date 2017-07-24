@@ -98,7 +98,7 @@
      :write (contains? #{write-perm own-perm} perms)
      :own   (contains? #{own-perm} perms)}))
 
-(defn user-collection-perms
+(defn- user-collection-perms
   [cm user coll-path]
   (validate-path-lengths coll-path)
   (->> (conj (set (user-groups cm user)) user)
@@ -108,11 +108,10 @@
        (map #(FilePermissionEnum/valueOf (Integer/parseInt (first %))))
        (set)))
 
-(defn user-dataobject-perms
+(defn- user-dataobject-perms
   [cm user data-path]
   (validate-path-lengths data-path)
-  (->> (conj (set (user-groups cm user)) user)
-       (map (partial username->id cm))
+  (->> (conj (set (user-group-ids cm user)) (username->id cm user))
        (map #(dataobject-perms-rs cm % data-path))
        (apply concat)
        (map (fn [^IRODSQueryResultRow rs] (.getColumnsAsList rs)))
@@ -153,65 +152,77 @@
      :write write
      :own   own}))
 
-(defn dataobject-perm?
+(defn- user-id-dataobject-perm?
+  "Utility function which checks if a given user-id has a given permission on
+  data-path"
+  [cm user-id data-path perm]
+  (let [results (dataobject-perms-rs cm user-id data-path)]
+    (some #(get (perm-map-for (first (.getColumnsAsList %))) perm) results)))
+
+(defn- dataobject-perm?
   "Utility function that checks to see of the user has the specified
-   permission for data-path."
+   permission or better for data-path."
   [cm username data-path checked-perm]
   (validate-path-lengths data-path)
-  (let [perms (user-dataobject-perms cm username data-path)]
-    (or (contains? perms checked-perm) (contains? perms own-perm))))
+  (or (user-id-dataobject-perm? cm (username->id cm username) data-path checked-perm)
+      (some #(user-id-dataobject-perm? cm % data-path checked-perm) (user-group-ids cm username))))
 
-(defn dataobject-readable?
+(defn- dataobject-readable?
   "Checks to see if the user has read permissions on data-path. Only
    works for dataobjects."
   [cm user data-path]
   (validate-path-lengths data-path)
-  (or (dataobject-perm? cm user data-path read-perm)
-      (dataobject-perm? cm user data-path write-perm)))
+  (dataobject-perm? cm user data-path :read))
 
-(defn dataobject-writeable?
+(defn- dataobject-writeable?
   "Checks to see if the user has write permissions on data-path. Only
    works for dataobjects."
   [cm user data-path]
   (validate-path-lengths data-path)
-  (dataobject-perm? cm user data-path write-perm))
+  (dataobject-perm? cm user data-path :write))
 
-(defn owns-dataobject?
+(defn- owns-dataobject?
   "Checks to see if the user has ownership permissions on data-path. Only
    works for dataobjects."
   [cm user data-path]
   (validate-path-lengths data-path)
-  (dataobject-perm? cm user data-path own-perm))
+  (dataobject-perm? cm user data-path :own))
 
-(defn collection-perm?
+(defn- user-coll-perm?
+  "Utility function which checks if a given user has a given permission on
+  coll-path"
+  [cm user coll-path perm]
+  (let [results (collection-perms-rs cm user coll-path)]
+    (some #(get (perm-map-for (first (.getColumnsAsList %))) perm) results)))
+
+(defn- collection-perm?
   "Utility function that checks to see if the user has the specified
-   permission for the collection path."
+   permission or better for the collection path."
   [cm username coll-path checked-perm]
   (validate-path-lengths coll-path)
-  (let [perms (user-collection-perms cm username coll-path)]
-    (or (contains? perms checked-perm) (contains? perms own-perm))))
+  (or (user-coll-perm? cm username coll-path checked-perm)
+      (some #(user-coll-perm? cm % coll-path checked-perm) (user-groups cm username))))
 
-(defn collection-readable?
+(defn- collection-readable?
   "Checks to see if the user has read permissions on coll-path. Only
    works for collection paths."
   [cm user coll-path]
   (validate-path-lengths coll-path)
-  (or (collection-perm? cm user coll-path read-perm)
-      (collection-perm? cm user coll-path write-perm)))
+  (collection-perm? cm user coll-path :read))
 
-(defn collection-writeable?
+(defn- collection-writeable?
   "Checks to see if the suer has write permissions on coll-path. Only
    works for collection paths."
   [cm user coll-path]
   (validate-path-lengths coll-path)
-  (collection-perm? cm user coll-path write-perm))
+  (collection-perm? cm user coll-path :write))
 
-(defn owns-collection?
+(defn- owns-collection?
   "Checks to see if the user has ownership permissions on coll-path. Only
    works for collection paths."
   [cm user coll-path]
   (validate-path-lengths coll-path)
-  (collection-perm? cm user coll-path own-perm))
+  (collection-perm? cm user coll-path :own))
 
 (defn perm-map
   [[perm-id username]]
@@ -230,17 +241,17 @@
   [cm abs-path]
   (let [path' (ft/rm-last-slash abs-path)]
     (validate-path-lengths path')
-    (if (item/is-file? cm path')
-      (mapv perm-map (ll/user-dataobject-perms cm path'))
-      (mapv perm-map (ll/user-collection-perms cm path')))))
+    (case (item/object-type cm path')
+      :file (mapv perm-map (ll/user-dataobject-perms cm path'))
+      :dir  (mapv perm-map (ll/user-collection-perms cm path')))))
 
 (defn list-user-perm
   [cm abs-path]
   (let [path' (ft/rm-last-slash abs-path)]
     (validate-path-lengths path')
-    (if (item/is-file? cm path')
-      (mapv perm-user->map (ll/user-dataobject-perms cm path'))
-      (mapv perm-user->map (ll/user-collection-perms cm path')))))
+    (case (item/object-type cm path')
+      :file (mapv perm-user->map (ll/user-dataobject-perms cm path'))
+      :dir  (mapv perm-user->map (ll/user-collection-perms cm path')))))
 
 (defn set-dataobj-perms
   [{^DataObjectAO dataobj :dataObjectAO zone :zone} user fpath read? write? own?]
@@ -267,12 +278,9 @@
      (set-permissions cm user fpath read? write? own? false))
   ([cm user fpath read? write? own? recursive?]
      (validate-path-lengths fpath)
-     (cond
-      (item/is-file? cm fpath)
-      (set-dataobj-perms cm user fpath read? write? own?)
-
-      (item/is-dir? cm fpath)
-      (set-coll-perms cm user fpath read? write? own? recursive?))))
+     (case (item/object-type cm fpath)
+      :file (set-dataobj-perms cm user fpath read? write? own?)
+      :dir  (set-coll-perms cm user fpath read? write? own? recursive?))))
 
 (defn set-permission
   ([cm user fpath permission]
@@ -302,12 +310,10 @@
     zone :zone
     :as cm} path owner]
   (validate-path-lengths path)
-  (cond
-   (item/is-file? cm path)
-   (.setAccessPermissionOwn data-ao zone path owner)
+  (case (item/object-type cm path)
+   :file (.setAccessPermissionOwn data-ao zone path owner)
 
-   (item/is-dir? cm path)
-   (.setAccessPermissionOwn collection-ao zone path owner true)))
+   :dir  (.setAccessPermissionOwn collection-ao zone path owner true)))
 
 (defn set-inherits
   "Sets the inheritance attribute of a collection to true (recursively).
@@ -351,18 +357,12 @@
       path - String containing an absolute path for something in iRODS."
   [cm user path]
   (validate-path-lengths path)
-  (cond
-   (not (user-exists? cm user))
-   false
-
-   (item/is-dir? cm path)
-   (collection-writeable? cm user (ft/rm-last-slash path))
-
-   (item/is-file? cm path)
-   (dataobject-writeable? cm user (ft/rm-last-slash path))
-
-   :else
-   false))
+  (if-not (user-exists? cm user)
+    false
+    (case (item/object-type cm path)
+      :dir  (collection-writeable? cm user (ft/rm-last-slash path))
+      :file (dataobject-writeable? cm user (ft/rm-last-slash path))
+      false)))
 
 (defn ^Boolean is-readable?
   "Returns true if 'user' can read 'path'.
@@ -373,18 +373,12 @@
       path - String containing an path for something in iRODS."
   [cm user path]
   (validate-path-lengths path)
-  (cond
-   (not (user-exists? cm user))
-   false
-
-   (item/is-dir? cm path)
-   (collection-readable? cm user (ft/rm-last-slash path))
-
-   (item/is-file? cm path)
-   (dataobject-readable? cm user (ft/rm-last-slash path))
-
-   :else
-   false))
+  (if-not (user-exists? cm user)
+    false
+    (case (item/object-type cm path)
+      :dir  (collection-readable? cm user (ft/rm-last-slash path))
+      :file (dataobject-readable? cm user (ft/rm-last-slash path))
+      false)))
 
 (defn ^Boolean paths-writeable?
   "Returns true if all of the paths in 'paths' are writeable by 'user'.
@@ -534,14 +528,9 @@
 (defn permissions
   [cm user fpath]
   (validate-path-lengths fpath)
-  (cond
-    (item/is-dir? cm fpath)
-    (collection-perm-map cm user fpath)
-
-    (item/is-file? cm fpath)
-    (dataobject-perm-map cm user fpath)
-
-    :else
+  (case (item/object-type cm fpath)
+    :dir  (collection-perm-map cm user fpath)
+    :file (dataobject-perm-map cm user fpath)
     {:read false
      :write false
      :own false}))
@@ -557,9 +546,9 @@
    Returns:
      It returns the aggregated permission."
   [cm user fpath]
-  (-> (cond
-        (item/is-dir? cm fpath)       (user-collection-perms cm user fpath)
-        (item/is-file? cm fpath) (user-dataobject-perms cm user fpath))
+  (-> (case (item/object-type cm fpath)
+        :dir  (user-collection-perms cm user fpath)
+        :file (user-dataobject-perms cm user fpath))
     max-perm
     fmt-perm))
 
@@ -569,16 +558,16 @@
     zone :zone
     :as cm} user fpath]
   (validate-path-lengths fpath)
-  (cond
-   (item/is-file? cm fpath)
-   (.removeAccessPermissionsForUserInAdminMode
+  (case (item/object-type cm fpath)
+   :file
+    (.removeAccessPermissionsForUserInAdminMode
      data-ao
      zone
      fpath
      user)
 
-   (item/is-dir? cm fpath)
-   (.removeAccessPermissionForUserAsAdmin
+   :dir 
+    (.removeAccessPermissionForUserAsAdmin
      collection-ao
      zone
      fpath
@@ -588,14 +577,9 @@
 (defn owns?
   [cm user fpath]
   (validate-path-lengths fpath)
-  (cond
-    (item/is-file? cm fpath)
-    (owns-dataobject? cm user fpath)
-
-    (item/is-dir? cm fpath)
-    (owns-collection? cm user fpath)
-
-    :else
+  (case (item/object-type cm fpath)
+    :file (owns-dataobject? cm user fpath)
+    :dir  (owns-collection? cm user fpath)
     false))
 
 (defn remove-access-permissions
@@ -604,16 +588,16 @@
     zone :zone
     :as cm} user abs-path]
   (validate-path-lengths abs-path)
-  (cond
-   (item/is-file? cm abs-path)
-   (.removeAccessPermissionsForUserInAdminMode
+  (case (item/object-type cm abs-path)
+   :file
+    (.removeAccessPermissionsForUserInAdminMode
      data-ao
      zone
      abs-path
      user)
 
-   (item/is-dir? cm abs-path)
-   (.removeAccessPermissionForUserAsAdmin
+   :dir
+    (.removeAccessPermissionForUserAsAdmin
      collection-ao
      zone
      abs-path

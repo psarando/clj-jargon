@@ -64,21 +64,28 @@
   (doseq [p paths] (validate-path-lengths p))
   (zero? (count (filter #(not (exists? cm %)) paths))))
 
-(defn ^Boolean jargon-type-check
-  [{^IRODSFileSystemAO cm-ao :fileSystemAO} check-type ^String path]
-  (= check-type (.getObjectType (.getObjStat cm-ao path))))
+(defn object-type
+  [{^IRODSFileSystemAO cm-ao :fileSystemAO} ^String path]
+  (condp = (.getObjectType (.getObjStat cm-ao path))
+    collection-type :dir
+    dataobject-type :file
+    :none))
+
+(defn- ^Boolean jargon-type-check
+  [cm check-type ^String path]
+  (= check-type (object-type cm path)))
 
 (defn ^Boolean is-file?
   "Returns true if the path is a file in iRODS, false otherwise."
   [cm ^String path]
   (validate-path-lengths path)
-  (jargon-type-check cm dataobject-type path))
+  (jargon-type-check cm :file path))
 
 (defn ^Boolean is-dir?
   "Returns true if the path is a directory in iRODS, false otherwise."
   [cm ^String path]
   (validate-path-lengths path)
-  (jargon-type-check cm collection-type path))
+  (jargon-type-check cm :dir path))
 
 (defn ^Boolean is-linked-dir?
   "Indicates whether or not a directory (collection) is actually a link to a
@@ -100,7 +107,7 @@
        getSpecColType)))
 
 (defn ^DataObject data-object
-  "Returns an instance of DataObject represeting 'path'."
+  "Returns an instance of DataObject representing 'path'."
   [{^DataObjectAO data-ao :dataObjectAO} ^String path]
   (validate-path-lengths path)
   (.findByAbsolutePath data-ao path))
@@ -124,44 +131,33 @@
   (validate-path-lengths path)
   (str (long (.getTime (.getCreatedAt (.getObjStat cm-ao path))))))
 
-(defn- dir-stat
-  "Returns status information for a directory."
-  [cm ^String path]
-  (validate-path-lengths path)
-  (let [coll (collection cm path)]
-    {:id            path
-     :path          path
-     :type          :dir
-     :date-created  (long (.. coll getCreatedAt getTime))
-     :date-modified (long (.. coll getModifiedAt getTime))}))
-
-(defn- file-stat
-  "Returns status information for a file."
-  [cm ^String path]
-  (validate-path-lengths path)
-  (let [data-obj (data-object cm path)]
-    {:id            path
-     :path          path
-     :type          :file
-     :file-size     (.getDataSize data-obj)
-     :md5           (.getChecksum data-obj)
-     :date-created  (long (.. data-obj getCreatedAt getTime))
-     :date-modified (long (.. data-obj getUpdatedAt getTime))}))
-
-(defn stat
-  "Returns status information for a path."
-  [cm ^String path]
-  (validate-path-lengths path)
-  (cond
-   (is-dir? cm path)  (dir-stat cm path)
-   (is-file? cm path) (file-stat cm path)
-   :else              nil))
-
 (defn file-size
   "Returns the size of the file in bytes."
   [{^IRODSFileSystemAO cm-ao :fileSystemAO} ^String path]
   (validate-path-lengths path)
   (.getObjSize (.getObjStat cm-ao path)))
+
+(defn stat
+  "Returns status information for a path."
+  [{^IRODSFileSystemAO cm-ao :fileSystemAO} ^String path]
+  (validate-path-lengths path)
+  (let [objstat (.getObjStat cm-ao path)]
+    (condp = (.getObjectType objstat)
+      collection-type
+      {:id            path
+       :path          path
+       :type          :dir
+       :date-created  (long (.getTime (.getCreatedAt objstat)))
+       :date-modified (long (.getTime (.getModifiedAt objstat)))}
+      dataobject-type
+      {:id            path
+       :path          path
+       :type          :file
+       :file-size     (.getObjSize objstat)
+       :md5           (.getChecksum objstat)
+       :date-created  (long (.getTime (.getCreatedAt objstat)))
+       :date-modified (long (.getTime (.getModifiedAt objstat)))
+       })))
 
 (defn quota-map
   [^Quota quota-entry]

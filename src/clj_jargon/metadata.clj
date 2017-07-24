@@ -1,6 +1,6 @@
 (ns clj-jargon.metadata
   (:use [clj-jargon.validations]
-        [clj-jargon.item-info :only [is-dir?]])
+        [clj-jargon.item-info :only [object-type]])
   (:require [clojure.string :as string]
             [slingshot.slingshot :refer [throw+ try+]]
             [clojure-commons.error-codes :refer [ERR_NOT_WRITEABLE]])
@@ -38,9 +38,9 @@
    ^String dir-path]
   (validate-path-lengths dir-path)
   (mapv avu2map
-    (if (is-dir? cm dir-path)
-      (.findMetadataValuesForCollection collection-ao dir-path)
-      (.findMetadataValuesForDataObject data-ao dir-path))))
+    (case (object-type cm dir-path)
+      :dir  (.findMetadataValuesForCollection collection-ao dir-path)
+      :file (.findMetadataValuesForDataObject data-ao dir-path))))
 
 (defn- get-metadata-by-query
   [{^DataObjectAO data-ao :dataObjectAO
@@ -48,9 +48,9 @@
     :as cm} path query]
   (validate-path-lengths path)
   (mapv avu2map
-    (if (is-dir? cm path)
-      (.findMetadataValuesByMetadataQueryForCollection collection-ao query path)
-      (.findMetadataValuesForDataObjectUsingAVUQuery data-ao query path))))
+    (case (object-type cm path)
+      :dir  (.findMetadataValuesByMetadataQueryForCollection collection-ao query path)
+      :file (.findMetadataValuesForDataObjectUsingAVUQuery data-ao query path))))
 
 (defn get-attribute
   "Returns a list of avu maps for a specific attribute associated with dir-path"
@@ -125,9 +125,9 @@
   [cm dir-path attr value unit]
   (validate-path-lengths dir-path)
   (try+
-    (let [ao-obj (if (is-dir? cm dir-path)
-                     (:collectionAO cm)
-                     (:dataObjectAO cm))]
+    (let [ao-obj (case (object-type cm dir-path)
+                     :dir  (:collectionAO cm)
+                     :file (:dataObjectAO cm))]
       (add-avu ao-obj dir-path (AvuData/instance attr value unit)))
     (catch CatNoAccessException _
       (throw+ {:error_code ERR_NOT_WRITEABLE :path dir-path}))))
@@ -138,9 +138,9 @@
   [cm dir-path attr value unit]
   (validate-path-lengths dir-path)
   (let [avu    (AvuData/instance attr value unit)
-        ao-obj (if (is-dir? cm dir-path)
-                 (:collectionAO cm)
-                 (:dataObjectAO cm))]
+        ao-obj (case (object-type cm dir-path)
+                 :dir  (:collectionAO cm)
+                 :file (:dataObjectAO cm))]
     (if (zero? (count (get-attribute cm dir-path attr)))
       (add-avu ao-obj dir-path avu)
       (let [old-avu (map2avu (first (get-attribute cm dir-path attr)))]
@@ -151,9 +151,9 @@
   (validate-path-lengths dir-path)
   (let [fattr  (first (attr-func))
         avu    (map2avu fattr)
-        ao-obj (if (is-dir? cm dir-path)
-                   (:collectionAO cm)
-                   (:dataObjectAO cm))]
+        ao-obj (case (object-type cm dir-path)
+                   :dir  (:collectionAO cm)
+                   :file (:dataObjectAO cm))]
     (delete-avu ao-obj dir-path avu)))
 
 (defn delete-metadata
@@ -165,7 +165,9 @@
 (defn delete-avus
   [cm dir-path avu-maps]
   (validate-path-lengths dir-path)
-  (let [ao (if (is-dir? cm dir-path) (:collectionAO cm) (:dataObjectAO cm))]
+  (let [ao (case (object-type cm dir-path)
+                   :dir  (:collectionAO cm)
+                   :file (:dataObjectAO cm))]
     (doseq [avu-map avu-maps]
       (when (attr-value? cm dir-path (:attr avu-map) (:value avu-map))
         (delete-avu ao dir-path (map2avu avu-map))))))
