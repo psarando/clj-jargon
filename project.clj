@@ -24,4 +24,4 @@
   :repositories [["dice.repository"
                   {:url "https://raw.github.com/DICE-UNC/DICE-Maven/master/releases"}]
                  ["renci-snapshot.repository"
-                  {:url "http://ci-dev.renci.org/nexus/content/repositories/renci-snapshot/"}]])
+                  {:url "https://ci-dev.renci.org/nexus/content/repositories/renci-snapshot/"}]])
