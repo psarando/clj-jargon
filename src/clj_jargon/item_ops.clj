@@ -103,7 +103,7 @@
     sources)))
 
 
-(defn- output-stream
+(defn output-stream
   "Returns an FileOutputStream for a file in iRODS pointed to by 'output-path'. If the file exists,
    it will be truncated."
   [{^IRODSFileFactory file-factory :fileFactory :as cm} output-path]
