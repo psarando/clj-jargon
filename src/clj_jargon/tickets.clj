@@ -43,10 +43,10 @@
     (.setTicketUsesLimit tas ticket-id uses-limit)))
 
 (defn create-ticket
-  [cm user fpath ticket-id & {:as ticket-opts}]
+  [cm user fpath ticket-id & {:keys [rw-mode] :as ticket-opts}]
   (validate-path-lengths fpath)
   (let [tas        (ticket-admin-service cm user)
-        read-mode  TicketCreateModeEnum/READ
+        read-mode  (if (= rw-mode :write) TicketCreateModeEnum/WRITE TicketCreateModeEnum/READ)
         new-ticket (.createTicket tas read-mode (file cm fpath) ticket-id)]
     (set-ticket-options ticket-id tas ticket-opts)
     new-ticket))
