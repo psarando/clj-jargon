@@ -149,16 +149,6 @@
   [^Ticket ticket-obj]
   (> (.getUsesCount ticket-obj) (.getUsesLimit ticket-obj)))
 
-;; unused?
-(defn init-ticket-session
-  [{^IRODSAccessObjectFactory ao-factory    :accessObjectFactory
-                              irods-account :irodsAccount} ticket-id]
-  (.. ao-factory
-    getIrodsSession
-    (currentConnection irods-account)
-    (irodsFunction
-      (TicketInp/instanceForSetSessionWithTicket ticket-id))))
-
 (defn ticket-input-stream
   [cm user ticket-id]
   (input-stream cm (.getIrodsAbsolutePath (ticket-by-id cm user ticket-id))))
