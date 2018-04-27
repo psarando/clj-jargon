@@ -1,32 +1,58 @@
 (ns clj-jargon.tickets
   (:use [clj-jargon.validations]
-        [clj-jargon.init :only [override-user-account proxy-input-stream]]
+        [clj-jargon.init :only [anonymous-user-account override-user-account proxy-input-stream]]
         [clj-jargon.cart :only [temp-password]]
         [clj-jargon.item-info :only [file object-type]]
-        [clj-jargon.item-ops :only [input-stream]])
+        [clj-jargon.item-ops :only [input-stream tcb]])
   (:require [clojure-commons.file-utils :as ft]
-            [clojure.tools.logging :as log])
-  (:import [org.irods.jargon.core.pub IRODSAccessObjectFactory]
+            [clojure.tools.logging :as log]
+            [clojure-commons.error-codes :refer [ERR_NOT_WRITEABLE]]
+            [slingshot.slingshot :refer [throw+]])
+  (:import [java.io File]
+           [org.irods.jargon.core.exception CatNoAccessException]
+           [org.irods.jargon.core.pub IRODSAccessObjectFactory]
+           [org.irods.jargon.core.connection IRODSAccount]
            [org.irods.jargon.ticket.packinstr TicketInp] 
            [org.irods.jargon.ticket.packinstr TicketCreateModeEnum] 
            [org.irods.jargon.ticket TicketServiceFactoryImpl
                                     TicketAdminService
                                     TicketAdminServiceImpl
                                     TicketClientSupport
+                                    TicketClientOperations
                                     Ticket]))
+
+(defn- ^IRODSAccount account-for-ticket
+  [cm username]
+  (condp = username
+    (:username cm)
+    (do (log/debug (str "Using existing account since '" username "' = '" (:username cm) "'"))
+        (:irodsAccount cm))
+
+    "anonymous"
+    (anonymous-user-account cm)
+
+    (do (log/debug (str "Creating temporary password for '" username "' which does not match '" (:username cm) "'"))
+        (override-user-account cm username (temp-password cm username)))))
 
 (defn- ^TicketAdminService ticket-admin-service
   "Creates an instance of TicketAdminService, which provides
    access to utility methods for performing operations on tickets.
    Probably doesn't need to be called directly."
   [cm username]
-  (let [tsf (TicketServiceFactoryImpl. (:accessObjectFactory cm))
-        user (if (= username (:username cm))
-                 (do (log/debug (str "Using existing account since '" username "' = '" (:username cm) "'"))
-                     (:irodsAccount cm))
-                 (do (log/debug (str "Creating temporary password for '" username "' which does not match '" (:username cm) "'"))
-                     (override-user-account cm username (temp-password cm username))))]
+  (let [tsf (:ticketServiceFactory cm)
+        user (account-for-ticket cm username)]
     (.instanceTicketAdminService tsf user)))
+
+(defn- ^TicketClientOperations ticket-client-operations
+  "Creates an instance of TicketAdminService, which provides
+   access to utility methods for performing operations on tickets.
+   Probably doesn't need to be called directly."
+  ([cm]
+   (ticket-client-operations cm (:username cm)))
+  ([cm username]
+   (let [tsf (:ticketServiceFactory cm)
+         user (account-for-ticket cm username)]
+     (.instanceTicketClientOperations tsf user))))
 
 (defn set-ticket-options
   "Sets the optional settings for a ticket, such as the expiration date
@@ -123,15 +149,6 @@
   [^Ticket ticket-obj]
   (> (.getUsesCount ticket-obj) (.getUsesLimit ticket-obj)))
 
-(defn init-ticket-session
-  [{^IRODSAccessObjectFactory ao-factory    :accessObjectFactory
-                              irods-account :irodsAccount} ticket-id]
-  (.. ao-factory
-    getIrodsSession
-    (currentConnection irods-account)
-    (irodsFunction
-      (TicketInp/instanceForSetSessionWithTicket ticket-id))))
-
 (defn ticket-input-stream
   [cm user ticket-id]
   (input-stream cm (.getIrodsAbsolutePath (ticket-by-id cm user ticket-id))))
@@ -140,3 +157,26 @@
   [cm user ticket-id]
   (proxy-input-stream cm (ticket-input-stream cm user ticket-id)))
 
+(defn iget
+  "Transfers remote-path to local-path using a ticket, using tcl as the TransferStatusCallbackListener"
+  ([cm ticket-id remote-path local-path tcl]
+    (iget cm ticket-id remote-path local-path tcl tcb))
+  ([cm ticket-id remote-path local-path tcl control-block]
+    (let [tco (ticket-client-operations cm)
+          sourceFile (file cm remote-path)
+          localFile (File. local-path)]
+      (.getOperationFromIRODSUsingTicket tco ticket-id sourceFile localFile tcl control-block))))
+
+(defn iput
+  "Transfers local-path to remote-path using a ticket, using tcl as the TransferStatusCallbackListener.
+   tcl can also be set to nil."
+  ([cm ticket-id local-path remote-path tcl]
+    (iput cm ticket-id local-path remote-path tcl tcb))
+  ([cm ticket-id local-path remote-path tcl control-block]
+    (try
+      (let [tco (ticket-client-operations cm)
+            targetFile (file cm remote-path)
+            localFile (File. local-path)]
+        (.putFileToIRODSUsingTicket tco ticket-id localFile targetFile tcl control-block))
+      (catch CatNoAccessException _
+        (throw+ {:error_code ERR_NOT_WRITEABLE :path remote-path})))))

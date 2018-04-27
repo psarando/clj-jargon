@@ -7,7 +7,8 @@
            [org.irods.jargon.core.connection IRODSAccount]
            [org.irods.jargon.core.exception InvalidClientUserException]
            [org.irods.jargon.core.pub IRODSAccessObjectFactory  ; Hint for Cursive inspection
-                                      IRODSFileSystem]))
+                                      IRODSFileSystem]
+           [org.irods.jargon.ticket TicketServiceFactoryImpl]))
 
 
 ; Debuging code.
@@ -48,18 +49,37 @@
   (log/debug curr-with-jargon-index "- returning a proxy input stream...")
   (proxy-input-stream cm retval))
 
+(defn override-user-account
+  [cfg user pass]
+  (IRODSAccount. (:host cfg)
+    (Integer/parseInt (:port cfg))
+    user
+    pass
+    (:home cfg)
+    (:zone cfg)
+    (:defaultResource cfg)))
+
+(defn anonymous-user-account
+  [cfg]
+  (IRODSAccount/instanceForAnonymous (:host cfg)
+                                     (Integer/parseInt (:port cfg))
+                                     (:home cfg)
+                                     (:zone cfg)
+                                     (:defaultResource cfg)))
 
 (defn- account
   [cfg client-user]
-  (IRODSAccount/instanceWithProxy (:host cfg)
-                                  (Integer/parseInt (:port cfg))
-                                  client-user
-                                  (:password cfg)
-                                  (:home cfg)
-                                  (:zone cfg)
-                                  (:defaultResource cfg)
-                                  (:username cfg)
-                                  (:zone cfg)))
+  (if (= (:username cfg) "anonymous")
+    (anonymous-user-account cfg)
+    (IRODSAccount/instanceWithProxy (:host cfg)
+                                    (Integer/parseInt (:port cfg))
+                                    client-user
+                                    (:password cfg)
+                                    (:home cfg)
+                                    (:zone cfg)
+                                    (:defaultResource cfg)
+                                    (:username cfg)
+                                    (:zone cfg))))
 
 
 (defn- context-map
@@ -71,17 +91,18 @@
     (let [aof  (.getIRODSAccessObjectFactory cm-proxy)
           acnt (.getAuthenticatedIRODSAccount (.authenticateIRODSAccount aof (account cfg client-user)))]
       (assoc cfg
-        :irodsAccount        acnt
-        :accessObjectFactory aof
-        :collectionAO        (.getCollectionAO aof acnt)
-        :dataObjectAO        (.getDataObjectAO aof acnt)
-        :userAO              (.getUserAO aof acnt)
-        :userGroupAO         (.getUserGroupAO aof acnt)
-        :fileFactory         (.getIRODSFileFactory cm-proxy acnt)
-        :fileSystemAO        (.getIRODSFileSystemAO aof acnt)
-        :lister              (.getCollectionAndDataObjectListAndSearchAO aof acnt)
-        :quotaAO             (.getQuotaAO aof acnt)
-        :executor            (.getIRODSGenQueryExecutor aof acnt)))
+        :irodsAccount         acnt
+        :accessObjectFactory  aof
+        :ticketServiceFactory (TicketServiceFactoryImpl. aof)
+        :collectionAO         (.getCollectionAO aof acnt)
+        :dataObjectAO         (.getDataObjectAO aof acnt)
+        :userAO               (.getUserAO aof acnt)
+        :userGroupAO          (.getUserGroupAO aof acnt)
+        :fileFactory          (.getIRODSFileFactory cm-proxy acnt)
+        :fileSystemAO         (.getIRODSFileSystemAO aof acnt)
+        :lister               (.getCollectionAndDataObjectListAndSearchAO aof acnt)
+        :quotaAO              (.getQuotaAO aof acnt)
+        :executor             (.getIRODSGenQueryExecutor aof acnt)))
     (catch InvalidClientUserException _
       (throw+ {:error_code ERR_NOT_A_USER :user client-user}))))
 
@@ -244,13 +265,3 @@
      :retry-sleep     retry-sleep
      :use-trash       use-trash
      :proxy           (proxy-ctor)})
-
-(defn override-user-account
-  [cfg user pass]
-  (IRODSAccount. (:host cfg)
-    (Integer/parseInt (:port cfg))
-    user
-    pass
-    (:home cfg)
-    (:zone cfg)
-    (:defaultResource cfg)))
