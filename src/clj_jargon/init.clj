@@ -215,7 +215,7 @@
                  :else                           (dirty-return retval#)))
              (catch Object o1#
                (try+
-                 (let [^IRODSFileSystem proxy-cm# (:proxy ~cm-sym)] (.close proxy-cm#))
+                 (clean-return ~cm-sym nil) ;use clean-return which knows how to handle delays and never-actually-used contexts
                  (catch Object o2#))
                (throw+))))))))
 
