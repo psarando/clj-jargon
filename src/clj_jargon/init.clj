@@ -16,9 +16,10 @@
 (def ^:dynamic curr-with-jargon-index nil)
 
 (defn clean-return
-  [{^IRODSFileSystem cm-proxy :proxy} retval]
+  [cm retval]
   (log/debug curr-with-jargon-index "- cleaning up and returning a plain value")
-  (.close cm-proxy)
+  (when (and (delay? cm) (realized? cm)) (.close (:proxy @cm)))
+  (when-not (delay? cm) (.close (:proxy cm)))
   retval)
 
 (defn dirty-return
@@ -27,8 +28,9 @@
   retval)
 
 (defn proxy-input-stream
-  [{^IRODSFileSystem cm-proxy :proxy} ^InputStream istream]
-  (let [with-jargon-index curr-with-jargon-index]
+  [cm ^InputStream istream]
+  (let [with-jargon-index curr-with-jargon-index
+        cm-proxy (if (delay? cm) (:proxy @cm) (:proxy cm))]
     (proxy [InputStream] []
       (available [] (.available istream))
       (mark [readlimit] (.mark istream readlimit))
@@ -150,6 +152,13 @@
 
         :else (:retval retval)))))
 
+(defn create-context-map-or-delay
+  "Creates a context map or a delay for one, depending whether lazy? is true"
+  [cfg client-user lazy?]
+  (if lazy?
+    (delay (create-jargon-context-map cfg client-user))
+    (create-jargon-context-map cfg client-user)))
+
 
 (defmacro with-jargon
   "An iRODS connection is opened, binding the connection's context to the symbolic cm-sym value.
@@ -168,6 +177,7 @@
    Options:
      :auto-close  - true if the connection should be closed automatically (default: true)
      :client-user - the user to operate as inside of iRODS (default: (:username cfg))
+     :lazy        - true if the cm-sym should be a delay to be dereferenced as needed (default: false)
 
    Returns:
      It returns the result from evaluating the last expression in the body.*
@@ -192,10 +202,11 @@
   (let [[opts-map [[cm-sym] & body]] (split-with #(not (vector? %)) params)
          opts                        (apply hash-map opts-map)]
     `(let [auto-close#  (if (nil? (:auto-close ~opts)) true (:auto-close ~opts))
-           client-user# (if (:client-user ~opts) (:client-user ~opts) (:username ~cfg))]
+           client-user# (if (:client-user ~opts) (:client-user ~opts) (:username ~cfg))
+           lazy# (if (nil? (:lazy ~opts)) false (:lazy ~opts))]
        (binding [curr-with-jargon-index (dosync (alter with-jargon-index inc))]
          (log/debug "curr-with-jargon-index:" curr-with-jargon-index)
-         (when-let [~cm-sym (create-jargon-context-map ~cfg client-user#)]
+         (when-let [~cm-sym (create-context-map-or-delay ~cfg client-user# lazy#)]
            (try+
              (let [retval# (do ~@body)]
                (cond
@@ -204,7 +215,7 @@
                  :else                           (dirty-return retval#)))
              (catch Object o1#
                (try+
-                 (let [^IRODSFileSystem proxy-cm# (:proxy ~cm-sym)] (.close proxy-cm#))
+                 (clean-return ~cm-sym nil) ;use clean-return which knows how to handle delays and never-actually-used contexts
                  (catch Object o2#))
                (throw+))))))))
 
