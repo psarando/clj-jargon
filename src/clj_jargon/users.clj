@@ -31,6 +31,16 @@
   (for [^UserGroup ug (.findUserGroupsForUser ug-ao user)]
     (.getUserGroupId ug)))
 
+(defn add-group
+  "Adds a group."
+  [{^UserGroupAO ug-ao :userGroupAO} zone group-name]
+  (.addUserGroup ug-ao (doto (UserGroup.) (.setZone zone) (.setUserGroupName group-name))))
+
+(defn add-user-to-group
+  "Adds a user to a group."
+  [{^UserGroupAO ug-ao :userGroupAO} zone group-name user-name]
+  (.addUserToGroup ug-ao group-name user-name zone))
+
 (defn user-exists?
   "Returns true if 'user' exists in iRODS."
   [{^UserAO user-ao :userAO} user]
